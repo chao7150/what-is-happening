@@ -1,0 +1,22 @@
+{
+  "name": "what-is-happening",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:chao7150/what-is-happening.git",
+  "author": "Satoru Yokoyama <22640673+chao7150@users.noreply.github.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "elm make src/Main.elm",
+    "commit": "cz"
+  },
+  "devDependencies": {
+    "commitizen": "^4.2.4",
+    "cz-conventional-changelog": "3.3.0",
+    "elm": "^0.19.1-5"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}
