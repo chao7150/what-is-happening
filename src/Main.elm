@@ -1,9 +1,11 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, button, div, input, text)
+import Html exposing (Html, button, div, input, p, text)
 import Html.Attributes exposing (value)
-import Html.Events exposing (onInput)
+import Html.Events exposing (onClick, onInput)
+import Process
+import Task
 
 
 
@@ -11,7 +13,7 @@ import Html.Events exposing (onInput)
 
 
 main =
-    Browser.sandbox { init = init, update = update, view = view }
+    Browser.element { init = init, update = update, view = view, subscriptions = subscriptions }
 
 
 
@@ -24,11 +26,13 @@ type alias Model =
     }
 
 
-init : Model
-init =
-    { running = False
-    , timeInput = "60"
-    }
+init : () -> ( Model, Cmd Msg )
+init _ =
+    ( { running = False
+      , timeInput = "60"
+      }
+    , Cmd.none
+    )
 
 
 
@@ -37,13 +41,32 @@ init =
 
 type Msg
     = TimeInput String
+    | StartTimer
 
 
-update : Msg -> Model -> Model
+delay : Float -> msg -> Cmd msg
+delay time msg =
+    Process.sleep time
+        |> Task.perform (\_ -> msg)
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         TimeInput input ->
-            { model | timeInput = input }
+            ( { model | timeInput = input }, Cmd.none )
+
+        StartTimer ->
+            ( model, delay 5000 <| TimeInput "4" )
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.none
 
 
 
@@ -53,7 +76,8 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div []
-        [ input [ value model.timeInput, onInput TimeInput ] []
+        [ p [] [ text "工事中 startを押すと5秒後に4になる" ]
+        , input [ value model.timeInput, onInput TimeInput ] []
         , startButton model.timeInput
         ]
 
@@ -62,7 +86,7 @@ startButton : String -> Html Msg
 startButton timeInput =
     case String.toInt timeInput of
         Just _ ->
-            button [] [ text "start" ]
+            button [ onClick StartTimer ] [ text "start" ]
 
         Nothing ->
             text ""
