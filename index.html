@@ -5848,6 +5848,12 @@ var $author$project$Main$update = F2(
 						model,
 						{remainingTimer: newFace, running: true}),
 					$elm$core$Platform$Cmd$none);
+			case 'StopTimer':
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{running: false}),
+					$elm$core$Platform$Cmd$none);
 			default:
 				return model.running ? ((model.remainingTimer > 0) ? _Utils_Tuple2(
 					_Utils_update(
@@ -5956,6 +5962,17 @@ var $author$project$Main$startButton = F2(
 			return $elm$html$Html$text('');
 		}
 	});
+var $author$project$Main$StopTimer = {$: 'StopTimer'};
+var $author$project$Main$stopButton = A2(
+	$elm$html$Html$button,
+	_List_fromArray(
+		[
+			$elm$html$Html$Events$onClick($author$project$Main$StopTimer)
+		]),
+	_List_fromArray(
+		[
+			$elm$html$Html$text('stop')
+		]));
 var $elm$html$Html$Attributes$value = $elm$html$Html$Attributes$stringProperty('value');
 var $author$project$Main$view = function (model) {
 	return A2(
@@ -5989,7 +6006,7 @@ var $author$project$Main$view = function (model) {
 						$elm$html$Html$Events$onInput($author$project$Main$MaxTimeInput)
 					]),
 				_List_Nil),
-				(!model.running) ? A2($author$project$Main$startButton, model.minTimeInput, model.maxTimeInput) : $elm$html$Html$text('')
+				(!model.running) ? A2($author$project$Main$startButton, model.minTimeInput, model.maxTimeInput) : $author$project$Main$stopButton
 			]));
 };
 var $author$project$Main$main = $elm$browser$Browser$element(

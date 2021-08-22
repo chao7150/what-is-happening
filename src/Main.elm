@@ -1,7 +1,7 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, button, div, input, p, ruby, text)
+import Html exposing (Html, button, div, input, p, text)
 import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Process
@@ -50,6 +50,7 @@ type Msg
     | MaxTimeInput String
     | StartTimer
     | NewFace Int
+    | StopTimer
     | Tick Time.Posix
 
 
@@ -83,6 +84,9 @@ update msg model =
 
         NewFace newFace ->
             ( { model | running = True, remainingTimer = newFace }, Cmd.none )
+
+        StopTimer ->
+            ( { model | running = False }, Cmd.none )
 
         Tick _ ->
             if model.running then
@@ -127,7 +131,7 @@ view model =
             startButton model.minTimeInput model.maxTimeInput
 
           else
-            text ""
+            stopButton
         ]
 
 
@@ -144,3 +148,8 @@ startButton min max =
 
         Nothing ->
             text ""
+
+
+stopButton : Html Msg
+stopButton =
+    button [ onClick StopTimer ] [ text "stop" ]
