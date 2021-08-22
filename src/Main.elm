@@ -2,9 +2,10 @@ module Main exposing (..)
 
 import Browser
 import Html exposing (Html, button, div, input, p, ruby, text)
-import Html.Attributes exposing (value)
+import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Process
+import Random
 import Task
 import Time
 
@@ -23,7 +24,8 @@ main =
 
 type alias Model =
     { running : Bool
-    , timeInput : String
+    , minTimeInput : String
+    , maxTimeInput : String
     , remainingTimer : Int
     }
 
@@ -31,7 +33,8 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { running = False
-      , timeInput = "60"
+      , minTimeInput = ""
+      , maxTimeInput = ""
       , remainingTimer = 0
       }
     , Cmd.none
@@ -43,8 +46,10 @@ init _ =
 
 
 type Msg
-    = TimeInput String
+    = MinTimeInput String
+    | MaxTimeInput String
     | StartTimer
+    | NewFace Int
     | Tick Time.Posix
 
 
@@ -57,16 +62,27 @@ delay time msg =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        TimeInput input ->
-            ( { model | timeInput = input }, Cmd.none )
+        MinTimeInput input ->
+            ( { model | minTimeInput = input }, Cmd.none )
+
+        MaxTimeInput input ->
+            ( { model | maxTimeInput = input }, Cmd.none )
 
         StartTimer ->
-            case String.toInt model.timeInput of
-                Just int ->
-                    ( { model | running = True, remainingTimer = int }, Cmd.none )
+            case String.toInt model.minTimeInput of
+                Just min ->
+                    case String.toInt model.maxTimeInput of
+                        Just max ->
+                            ( model, Random.generate NewFace (Random.int min max) )
+
+                        Nothing ->
+                            ( model, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
+
+        NewFace newFace ->
+            ( { model | running = True, remainingTimer = newFace }, Cmd.none )
 
         Tick _ ->
             if model.running then
@@ -96,8 +112,7 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
     div []
-        [ p [] [ text "工事中 startを押すと指定秒数後に停止する" ]
-        , p []
+        [ p []
             [ text
                 (if model.running then
                     "計測中"
@@ -106,20 +121,26 @@ view model =
                     "停止中"
                 )
             ]
-        , input [ value model.timeInput, onInput TimeInput ] []
+        , input [ value model.minTimeInput, placeholder "min", onInput MinTimeInput ] []
+        , input [ value model.maxTimeInput, placeholder "max", onInput MaxTimeInput ] []
         , if not model.running then
-            startButton model.timeInput
+            startButton model.minTimeInput model.maxTimeInput
 
           else
             text ""
         ]
 
 
-startButton : String -> Html Msg
-startButton timeInput =
-    case String.toInt timeInput of
+startButton : String -> String -> Html Msg
+startButton min max =
+    case String.toInt min of
         Just _ ->
-            button [ onClick StartTimer ] [ text "start" ]
+            case String.toInt max of
+                Just _ ->
+                    button [ onClick StartTimer ] [ text "start" ]
+
+                Nothing ->
+                    text ""
 
         Nothing ->
             text ""
