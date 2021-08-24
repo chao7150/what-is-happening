@@ -1,10 +1,9 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, button, div, input, p, text)
+import Html exposing (Html, button, div, input, li, p, text, time, ul)
 import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
-import Process
 import Random
 import Task
 import Time
@@ -22,12 +21,23 @@ main =
 -- MODEL
 
 
+type alias Sample =
+    { time : Time.Posix, comment : String }
+
+
 type alias Model =
     { running : Bool
     , minTimeInput : String
     , maxTimeInput : String
     , remainingTimer : Int
+    , samples : List Sample
+    , zone : Time.Zone
     }
+
+
+setSystemTime : Cmd Msg
+setSystemTime =
+    Task.perform SetSystemTime <| Time.here
 
 
 init : () -> ( Model, Cmd Msg )
@@ -36,8 +46,10 @@ init _ =
       , minTimeInput = ""
       , maxTimeInput = ""
       , remainingTimer = 0
+      , samples = []
+      , zone = Time.utc
       }
-    , Cmd.none
+    , setSystemTime
     )
 
 
@@ -46,7 +58,8 @@ init _ =
 
 
 type Msg
-    = MinTimeInput String
+    = SetSystemTime Time.Zone
+    | MinTimeInput String
     | MaxTimeInput String
     | StartTimer
     | NewFace Int
@@ -54,15 +67,12 @@ type Msg
     | Tick Time.Posix
 
 
-delay : Float -> msg -> Cmd msg
-delay time msg =
-    Process.sleep time
-        |> Task.perform (\_ -> msg)
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        SetSystemTime zone ->
+            ( { model | zone = zone }, Cmd.none )
+
         MinTimeInput input ->
             ( { model | minTimeInput = input }, Cmd.none )
 
@@ -88,13 +98,13 @@ update msg model =
         StopTimer ->
             ( { model | running = False }, Cmd.none )
 
-        Tick _ ->
+        Tick now ->
             if model.running then
                 if model.remainingTimer > 0 then
                     ( { model | remainingTimer = model.remainingTimer - 1 }, Cmd.none )
 
                 else
-                    ( { model | running = False }, Cmd.none )
+                    ( { model | running = False, samples = List.append model.samples [ { time = now, comment = "" } ] }, Cmd.none )
 
             else
                 ( model, Cmd.none )
@@ -132,6 +142,7 @@ view model =
 
           else
             stopButton
+        , sampleList model.samples model.zone
         ]
 
 
@@ -153,3 +164,13 @@ startButton min max =
 stopButton : Html Msg
 stopButton =
     button [ onClick StopTimer ] [ text "stop" ]
+
+
+sampleList : List Sample -> Time.Zone -> Html Msg
+sampleList samples zone =
+    ul [] (List.map (\sample -> li [] [ time [] [ text <| formatTime sample.time zone ], input [] [] ]) samples)
+
+
+formatTime : Time.Posix -> Time.Zone -> String
+formatTime posix zone =
+    (String.fromInt <| Time.toHour zone posix) ++ ":" ++ (String.fromInt <| Time.toMinute zone posix) ++ ":" ++ (String.fromInt <| Time.toSecond zone posix)
