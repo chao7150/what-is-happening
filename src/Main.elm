@@ -1,9 +1,14 @@
-module Main exposing (..)
+port module Main exposing (..)
 
-import Browser
-import Html exposing (Html, button, div, input, li, p, text, time, ul)
+import Audio exposing (Audio, AudioCmd, AudioData)
+import Browser.Navigation exposing (load)
+import Duration
+import Html exposing (Html, button, div, input, li, p, pre, text, time, ul)
 import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
+import Json.Decode
+import Json.Encode
+import Process
 import Random
 import Task
 import Time
@@ -13,8 +18,9 @@ import Time
 -- MAIN
 
 
+main : Platform.Program () (Audio.Model Msg Model) (Audio.Msg Msg)
 main =
-    Browser.element { init = init, update = update, view = view, subscriptions = subscriptions }
+    Audio.elementWithAudio { init = init, update = update, view = view, subscriptions = subscriptions, audio = audio, audioPort = { toJS = audioPortToJS, fromJS = audioPortFromJS } }
 
 
 
@@ -25,14 +31,48 @@ type alias Sample =
     { time : Time.Posix, comment : String }
 
 
-type alias Model =
+type SoundState
+    = NotPlaying
+    | Playing Time.Posix
+
+
+type alias LoadedModel_ =
     { running : Bool
     , minTimeInput : String
     , maxTimeInput : String
     , remainingTimer : Int
     , samples : List Sample
     , zone : Time.Zone
+    , sound : Audio.Source
+    , soundState : SoundState
     }
+
+
+type Model
+    = LoadingModel
+    | LoadedModel LoadedModel_
+    | LoadFailedModel
+
+
+port audioPortToJS : Json.Encode.Value -> Cmd msg
+
+
+port audioPortFromJS : (Json.Decode.Value -> msg) -> Sub msg
+
+
+audio : AudioData -> Model -> Audio
+audio _ model =
+    case model of
+        LoadedModel loadedModel ->
+            case loadedModel.soundState of
+                NotPlaying ->
+                    Audio.silence
+
+                Playing time ->
+                    Audio.audio loadedModel.sound time
+
+        _ ->
+            Audio.silence
 
 
 setSystemTime : Cmd Msg
@@ -40,16 +80,16 @@ setSystemTime =
     Task.perform SetSystemTime <| Time.here
 
 
-init : () -> ( Model, Cmd Msg )
+delay : Float -> msg -> Cmd msg
+delay time msg =
+    Task.perform (\_ -> msg) (Process.sleep time)
+
+
+init : () -> ( Model, Cmd Msg, AudioCmd Msg )
 init _ =
-    ( { running = False
-      , minTimeInput = ""
-      , maxTimeInput = ""
-      , remainingTimer = 0
-      , samples = []
-      , zone = Time.utc
-      }
-    , setSystemTime
+    ( LoadingModel
+    , Cmd.none
+    , Audio.loadAudio SoundLoaded "./sin440.wav"
     )
 
 
@@ -58,64 +98,99 @@ init _ =
 
 
 type Msg
-    = SetSystemTime Time.Zone
+    = SoundLoaded (Result Audio.LoadError Audio.Source)
+    | SetSystemTime Time.Zone
     | MinTimeInput String
     | MaxTimeInput String
     | StartTimer
     | NewFace Int
     | StopTimer
     | Tick Time.Posix
+    | PressedPlay
+    | PressedPlayAndGotTime Time.Posix
+    | StopAudio
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case msg of
-        SetSystemTime zone ->
-            ( { model | zone = zone }, Cmd.none )
+update : AudioData -> Msg -> Model -> ( Model, Cmd Msg, AudioCmd Msg )
+update _ msg model =
+    case model of
+        LoadingModel ->
+            case msg of
+                SoundLoaded result ->
+                    case result of
+                        Ok sound ->
+                            ( LoadedModel { running = False, minTimeInput = "", maxTimeInput = "", remainingTimer = 0, samples = [], zone = Time.utc, sound = sound, soundState = NotPlaying }, setSystemTime, Audio.cmdNone )
 
-        MinTimeInput input ->
-            ( { model | minTimeInput = input }, Cmd.none )
+                        Err _ ->
+                            ( LoadFailedModel, Cmd.none, Audio.cmdNone )
 
-        MaxTimeInput input ->
-            ( { model | maxTimeInput = input }, Cmd.none )
+                _ ->
+                    ( model, Cmd.none, Audio.cmdNone )
 
-        StartTimer ->
-            case String.toInt model.minTimeInput of
-                Just min ->
-                    case String.toInt model.maxTimeInput of
-                        Just max ->
-                            ( model, Random.generate NewFace (Random.int min max) )
+        LoadFailedModel ->
+            ( model, Cmd.none, Audio.cmdNone )
+
+        LoadedModel loadedModel ->
+            case msg of
+                SetSystemTime zone ->
+                    ( LoadedModel { loadedModel | zone = zone }, Cmd.none, Audio.cmdNone )
+
+                MinTimeInput input ->
+                    ( LoadedModel { loadedModel | minTimeInput = input }, Cmd.none, Audio.cmdNone )
+
+                MaxTimeInput input ->
+                    ( LoadedModel { loadedModel | maxTimeInput = input }, Cmd.none, Audio.cmdNone )
+
+                StartTimer ->
+                    case String.toInt loadedModel.minTimeInput of
+                        Just min ->
+                            case String.toInt loadedModel.maxTimeInput of
+                                Just max ->
+                                    ( LoadedModel loadedModel, Random.generate NewFace (Random.int min max), Audio.cmdNone )
+
+                                Nothing ->
+                                    ( LoadedModel loadedModel, Cmd.none, Audio.cmdNone )
 
                         Nothing ->
-                            ( model, Cmd.none )
+                            ( LoadedModel loadedModel, Cmd.none, Audio.cmdNone )
 
-                Nothing ->
-                    ( model, Cmd.none )
+                NewFace newFace ->
+                    ( LoadedModel { loadedModel | running = True, remainingTimer = newFace }, Cmd.none, Audio.cmdNone )
 
-        NewFace newFace ->
-            ( { model | running = True, remainingTimer = newFace }, Cmd.none )
+                StopTimer ->
+                    ( LoadedModel { loadedModel | running = False }, Cmd.none, Audio.cmdNone )
 
-        StopTimer ->
-            ( { model | running = False }, Cmd.none )
+                PressedPlay ->
+                    ( LoadedModel loadedModel, Task.perform PressedPlayAndGotTime Time.now, Audio.cmdNone )
 
-        Tick now ->
-            if model.running then
-                if model.remainingTimer > 0 then
-                    ( { model | remainingTimer = model.remainingTimer - 1 }, Cmd.none )
+                PressedPlayAndGotTime time ->
+                    ( LoadedModel { loadedModel | soundState = Playing time }, delay 3000 StopAudio, Audio.cmdNone )
 
-                else
-                    ( { model | running = False, samples = List.append model.samples [ { time = now, comment = "" } ] }, Cmd.none )
+                StopAudio ->
+                    ( LoadedModel { loadedModel | soundState = NotPlaying }, Cmd.none, Audio.cmdNone )
 
-            else
-                ( model, Cmd.none )
+                Tick now ->
+                    if loadedModel.running then
+                        if loadedModel.remainingTimer > 0 then
+                            ( LoadedModel { loadedModel | remainingTimer = loadedModel.remainingTimer - 1 }, Cmd.none, Audio.cmdNone )
+
+                        else
+                            ( LoadedModel { loadedModel | running = False, samples = List.append loadedModel.samples [ { time = now, comment = "" } ] }, Task.perform PressedPlayAndGotTime Time.now, Audio.cmdNone )
+
+                    else
+                        ( model, Cmd.none, Audio.cmdNone )
+
+                -- unreachable
+                SoundLoaded _ ->
+                    ( model, Cmd.none, Audio.cmdNone )
 
 
 
 -- SUBSCRIPTIONS
 
 
-subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions : AudioData -> Model -> Sub Msg
+subscriptions _ model =
     Time.every 1000 Tick
 
 
@@ -123,27 +198,35 @@ subscriptions model =
 -- VIEW
 
 
-view : Model -> Html Msg
-view model =
-    div []
-        [ p []
-            [ text
-                (if model.running then
-                    "計測中"
+view : AudioData -> Model -> Html Msg
+view _ model =
+    case model of
+        LoadingModel ->
+            p [] [ text "loading" ]
 
-                 else
-                    "停止中"
-                )
-            ]
-        , input [ value model.minTimeInput, placeholder "min", onInput MinTimeInput ] []
-        , input [ value model.maxTimeInput, placeholder "max", onInput MaxTimeInput ] []
-        , if not model.running then
-            startButton model.minTimeInput model.maxTimeInput
+        LoadFailedModel ->
+            p [] [ text "load failed" ]
 
-          else
-            stopButton
-        , sampleList model.samples model.zone
-        ]
+        LoadedModel loadedModel ->
+            div []
+                [ p []
+                    [ text
+                        (if loadedModel.running then
+                            "計測中"
+
+                         else
+                            "停止中"
+                        )
+                    ]
+                , input [ value loadedModel.minTimeInput, placeholder "min", onInput MinTimeInput ] []
+                , input [ value loadedModel.maxTimeInput, placeholder "max", onInput MaxTimeInput ] []
+                , if not loadedModel.running then
+                    startButton loadedModel.minTimeInput loadedModel.maxTimeInput
+
+                  else
+                    stopButton
+                , sampleList loadedModel.samples loadedModel.zone
+                ]
 
 
 startButton : String -> String -> Html Msg
