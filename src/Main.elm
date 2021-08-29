@@ -1,8 +1,6 @@
 port module Main exposing (..)
 
 import Audio exposing (Audio, AudioCmd, AudioData)
-import Browser.Navigation exposing (load)
-import Duration
 import Html exposing (Html, button, div, input, li, p, pre, text, time, ul)
 import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
@@ -102,6 +100,7 @@ type Msg
     | SetSystemTime Time.Zone
     | MinTimeInput String
     | MaxTimeInput String
+    | SampleInput Time.Posix String
     | StartTimer
     | NewFace Int
     | StopTimer
@@ -140,6 +139,24 @@ update _ msg model =
 
                 MaxTimeInput input ->
                     ( LoadedModel { loadedModel | maxTimeInput = input }, Cmd.none, Audio.cmdNone )
+
+                SampleInput time input ->
+                    ( LoadedModel
+                        { loadedModel
+                            | samples =
+                                List.map
+                                    (\sample ->
+                                        if sample.time == time then
+                                            { sample | comment = input }
+
+                                        else
+                                            sample
+                                    )
+                                    loadedModel.samples
+                        }
+                    , Cmd.none
+                    , Audio.cmdNone
+                    )
 
                 StartTimer ->
                     case String.toInt loadedModel.minTimeInput of
@@ -225,7 +242,11 @@ view _ model =
 
                   else
                     stopButton
-                , sampleList loadedModel.samples loadedModel.zone
+                , sampleList loadedModel.samples
+                    loadedModel.zone
+                , pre
+                    []
+                    [ text <| String.join "\n" <| List.map (\sample -> formatTime sample.time loadedModel.zone ++ "," ++ sample.comment) loadedModel.samples ]
                 ]
 
 
@@ -251,9 +272,9 @@ stopButton =
 
 sampleList : List Sample -> Time.Zone -> Html Msg
 sampleList samples zone =
-    ul [] (List.map (\sample -> li [] [ time [] [ text <| formatTime sample.time zone ], input [] [] ]) samples)
+    ul [] (List.map (\sample -> li [] [ time [] [ text <| formatTime sample.time zone ], input [ value sample.comment, onInput (SampleInput sample.time) ] [] ]) samples)
 
 
 formatTime : Time.Posix -> Time.Zone -> String
 formatTime posix zone =
-    (String.fromInt <| Time.toHour zone posix) ++ ":" ++ (String.fromInt <| Time.toMinute zone posix) ++ ":" ++ (String.fromInt <| Time.toSecond zone posix)
+    (String.padLeft 2 '0' <| String.fromInt <| Time.toHour zone posix) ++ ":" ++ (String.padLeft 2 '0' <| String.fromInt <| Time.toMinute zone posix) ++ ":" ++ (String.padLeft 2 '0' <| String.fromInt <| Time.toSecond zone posix)
