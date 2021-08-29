@@ -7766,6 +7766,7 @@ var $author$project$Main$sampleList = F2(
 								$elm$html$Html$input,
 								_List_fromArray(
 									[
+										$elm$html$Html$Attributes$placeholder('What is happening?'),
 										$elm$html$Html$Attributes$value(sample.X),
 										$elm$html$Html$Events$onInput(
 										$author$project$Main$SampleInput(sample.Q))
@@ -7853,6 +7854,13 @@ var $author$project$Main$view = F2(
 					_List_Nil,
 					_List_fromArray(
 						[
+							A2(
+							$elm$html$Html$p,
+							_List_Nil,
+							_List_fromArray(
+								[
+									$elm$html$Html$text('minとmaxに設定した秒数の間でランダムなタイミングで音が鳴ります。鳴った時刻をリストで記録します。')
+								])),
 							A2(
 							$elm$html$Html$p,
 							_List_Nil,

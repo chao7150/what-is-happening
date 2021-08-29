@@ -226,7 +226,8 @@ view _ model =
 
         LoadedModel loadedModel ->
             div []
-                [ p []
+                [ p [] [ text "minとmaxに設定した秒数の間でランダムなタイミングで音が鳴ります。鳴った時刻をリストで記録します。" ]
+                , p []
                     [ text
                         (if loadedModel.running then
                             "計測中"
@@ -272,7 +273,7 @@ stopButton =
 
 sampleList : List Sample -> Time.Zone -> Html Msg
 sampleList samples zone =
-    ul [] (List.map (\sample -> li [] [ time [] [ text <| formatTime sample.time zone ], input [ value sample.comment, onInput (SampleInput sample.time) ] [] ]) samples)
+    ul [] (List.map (\sample -> li [] [ time [] [ text <| formatTime sample.time zone ], input [ placeholder "What is happening?", value sample.comment, onInput (SampleInput sample.time) ] [] ]) samples)
 
 
 formatTime : Time.Posix -> Time.Zone -> String
