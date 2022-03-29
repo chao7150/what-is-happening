@@ -38,6 +38,7 @@ type alias LoadedModel_ =
     { running : Bool
     , minTimeInput : String
     , maxTimeInput : String
+    , upTimer : Int
     , remainingTimer : Int
     , samples : List Sample
     , zone : Time.Zone
@@ -118,7 +119,7 @@ update _ msg model =
                 SoundLoaded result ->
                     case result of
                         Ok sound ->
-                            ( LoadedModel { running = False, minTimeInput = "", maxTimeInput = "", remainingTimer = 0, samples = [], zone = Time.utc, sound = sound, soundState = NotPlaying }, setSystemTime, Audio.cmdNone )
+                            ( LoadedModel { running = False, minTimeInput = "", maxTimeInput = "", upTimer = 0, remainingTimer = 0, samples = [], zone = Time.utc, sound = sound, soundState = NotPlaying }, setSystemTime, Audio.cmdNone )
 
                         Err _ ->
                             ( LoadFailedModel, Cmd.none, Audio.cmdNone )
@@ -172,7 +173,7 @@ update _ msg model =
                             ( LoadedModel loadedModel, Cmd.none, Audio.cmdNone )
 
                 NewFace newFace ->
-                    ( LoadedModel { loadedModel | running = True, remainingTimer = newFace }, Cmd.none, Audio.cmdNone )
+                    ( LoadedModel { loadedModel | running = True, upTimer = 0, remainingTimer = newFace }, Cmd.none, Audio.cmdNone )
 
                 StopTimer ->
                     ( LoadedModel { loadedModel | running = False }, Cmd.none, Audio.cmdNone )
@@ -189,7 +190,7 @@ update _ msg model =
                 Tick now ->
                     if loadedModel.running then
                         if loadedModel.remainingTimer > 0 then
-                            ( LoadedModel { loadedModel | remainingTimer = loadedModel.remainingTimer - 1 }, Cmd.none, Audio.cmdNone )
+                            ( LoadedModel { loadedModel | upTimer = loadedModel.upTimer + 1, remainingTimer = loadedModel.remainingTimer - 1 }, Cmd.none, Audio.cmdNone )
 
                         else
                             ( LoadedModel { loadedModel | running = False, samples = List.append loadedModel.samples [ { time = now, comment = "" } ] }, Task.perform PressedPlayAndGotTime Time.now, Audio.cmdNone )
@@ -236,6 +237,7 @@ view _ model =
                             "停止中"
                         )
                     ]
+                , p [] [ text (String.fromInt loadedModel.upTimer) ]
                 , input [ value loadedModel.minTimeInput, placeholder "min", onInput MinTimeInput ] []
                 , input [ value loadedModel.maxTimeInput, placeholder "max", onInput MaxTimeInput ] []
                 , if not loadedModel.running then
