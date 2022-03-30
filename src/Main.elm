@@ -38,8 +38,9 @@ type alias LoadedModel_ =
     { running : Bool
     , minTimeInput : String
     , maxTimeInput : String
+    , startTimestamp : Time.Posix
     , upTimer : Int
-    , remainingTimer : Int
+    , durationMs : Int
     , samples : List Sample
     , zone : Time.Zone
     , sound : Audio.Source
@@ -104,6 +105,7 @@ type Msg
     | SampleInput Time.Posix String
     | StartTimer
     | NewFace Int
+    | GetStartTimestamp Time.Posix
     | StopTimer
     | Tick Time.Posix
     | PressedPlay
@@ -119,7 +121,7 @@ update _ msg model =
                 SoundLoaded result ->
                     case result of
                         Ok sound ->
-                            ( LoadedModel { running = False, minTimeInput = "", maxTimeInput = "", upTimer = 0, remainingTimer = 0, samples = [], zone = Time.utc, sound = sound, soundState = NotPlaying }, setSystemTime, Audio.cmdNone )
+                            ( LoadedModel { running = False, minTimeInput = "", maxTimeInput = "", startTimestamp = Time.millisToPosix 0, upTimer = 0, durationMs = 0, samples = [], zone = Time.utc, sound = sound, soundState = NotPlaying }, setSystemTime, Audio.cmdNone )
 
                         Err _ ->
                             ( LoadFailedModel, Cmd.none, Audio.cmdNone )
@@ -173,7 +175,10 @@ update _ msg model =
                             ( LoadedModel loadedModel, Cmd.none, Audio.cmdNone )
 
                 NewFace newFace ->
-                    ( LoadedModel { loadedModel | running = True, upTimer = 0, remainingTimer = newFace }, Cmd.none, Audio.cmdNone )
+                    ( LoadedModel { loadedModel | upTimer = 0, durationMs = newFace * 1000 }, Task.perform GetStartTimestamp Time.now, Audio.cmdNone )
+
+                GetStartTimestamp timestamp ->
+                    ( LoadedModel { loadedModel | running = True, startTimestamp = timestamp }, Cmd.none, Audio.cmdNone )
 
                 StopTimer ->
                     ( LoadedModel { loadedModel | running = False }, Cmd.none, Audio.cmdNone )
@@ -189,8 +194,8 @@ update _ msg model =
 
                 Tick now ->
                     if loadedModel.running then
-                        if loadedModel.remainingTimer > 0 then
-                            ( LoadedModel { loadedModel | upTimer = loadedModel.upTimer + 1, remainingTimer = loadedModel.remainingTimer - 1 }, Cmd.none, Audio.cmdNone )
+                        if Time.posixToMillis now - Time.posixToMillis loadedModel.startTimestamp < loadedModel.durationMs then
+                            ( LoadedModel { loadedModel | upTimer = (Time.posixToMillis now - Time.posixToMillis loadedModel.startTimestamp) // 1000 }, Cmd.none, Audio.cmdNone )
 
                         else
                             ( LoadedModel { loadedModel | running = False, samples = List.append loadedModel.samples [ { time = now, comment = "" } ] }, Task.perform PressedPlayAndGotTime Time.now, Audio.cmdNone )
